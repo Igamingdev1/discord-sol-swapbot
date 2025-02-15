@@ -54,7 +54,7 @@ async function getTipAccounts(): Promise<string[]> {
   }
 }
 
-async function createJitoBundle(transaction: Transaction | VersionedTransaction, wallet:Keypair): Promise<string[]> {
+async function createJitoBundle(transaction: Transaction | VersionedTransaction, wallet: Keypair): Promise<string[]> {
   try {
     const tipAccounts = await getTipAccounts();
     if (!tipAccounts || tipAccounts.length === 0) {
@@ -76,7 +76,7 @@ async function createJitoBundle(transaction: Transaction | VersionedTransaction,
     const tipTransaction = new Transaction().add(tipInstruction);
     tipTransaction.recentBlockhash = latestBlockhash.blockhash;
     tipTransaction.feePayer = wallet.publicKey;
-    
+
     // Sign the transaction using the signTransaction method
     tipTransaction.sign(wallet);
 

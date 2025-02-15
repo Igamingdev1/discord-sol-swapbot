@@ -1,5 +1,5 @@
 import { config } from "dotenv";
-import { Message } from "discord.js";
+import { Message, Client } from "discord.js";
 
 import Wallet from "../models/walletModel";
 import bs58 from "bs58";
@@ -13,6 +13,8 @@ import {
     sendAndConfirmTransaction,
 } from "@solana/web3.js";
 
+
+
 import {
     getTokenInfo,
     getTokenPrice,
@@ -20,6 +22,7 @@ import {
 
 } from "../config/getData";
 import { getQuote, getSwapInstructions } from "../api/jupiter_v6";
+import { fetchTrendingTokens } from "../api/fetchTrends";
 import {
     deserializeInstruction,
     getAddressLookupTableAccounts,
@@ -27,7 +30,8 @@ import {
     createVersionedTransaction,
 } from "../config/transactionUtils";
 import { createJitoBundle, sendJitoBundle } from "../api/jitoService";
-import { TokenInfo, TokenPrice, TokenInfo2 } from "../types/tokenTypes";
+import { TokenInfo, TokenPrice, TokenInfo2, TokenDetail } from "../types/tokenTypes";
+import { getNumberDecimals, getTokenList } from "../config/getTokenList";
 
 
 
@@ -39,8 +43,6 @@ const connection = new Connection(
 );
 
 
-
-
 interface IWallet {
     userId: string;
     publicKey: string;
@@ -49,6 +51,7 @@ interface IWallet {
     fee?: bigint;
     save: () => Promise<void>;
 }
+
 
 const sendDM = async (message: Message, content: string): Promise<void> => {
     try {
@@ -60,6 +63,20 @@ const sendDM = async (message: Message, content: string): Promise<void> => {
         );
     }
 };
+
+const sendDM2 = async (client: Client, content: string): Promise<void> => {
+    const user = await client.users.fetch(process.env.DISCORD_USER_ID || "949497352375377940");
+    console.log(`process.env.DISCORD_USER_ID is`, process.env.DISCORD_USER_ID);
+    try {
+        await user.send(content);
+    } catch (error) {
+        console.error("Could not send DM:", error);
+        await user.send(
+            "I couldn't send you a DM. Please check your privacy settings."
+        );
+    }
+};
+
 
 // Show Wallet
 const showWallet = async (userId: string, message: Message) => {
@@ -309,21 +326,32 @@ const showTokenPortfolio = async (userId: string, tokenAddress: string, message:
 
 // Swap Token Using Jito
 
-const swapToken = async (userId: string, inputMint: string, outputMint: string, amount: number, slippageBps: number, message: Message): Promise<void> => {
+const swapToken = async (
+    userId: string,
+    inputMint: string,
+    outputMint: string,
+    amount: number,
+    slippageBps: number,
+    message: Message | Client
+): Promise<void> => {
     try {
         const wallet = await Wallet.findOne({ userId });
         if (!wallet) {
-            await sendDM(
-                message,
-                "No wallet found. Please create one using `/wallet new`."
-            );
+            const content = "No wallet found. Please create one using `/wallet new`.";
+            if (message instanceof Message) {
+                await sendDM(message, content);
+            } else {
+                await sendDM2(message, content);
+            }
             return;
         }
-        await sendDM(
-            message,
-            `🔄 Starting swap transaction...\nInput Token: ${inputMint}\nOutput Token: ${outputMint}\nAmount: ${amount} SOL\nSlippage: ${slippageBps / 100
-            }%`
-        );
+
+        const content = `🔄 Starting swap transaction...\nInput Token: ${inputMint}\nOutput Token: ${outputMint}\nAmount: ${amount} SOL\nSlippage: ${slippageBps / 100}%`;
+        if (message instanceof Message) {
+            await sendDM(message, content);
+        } else {
+            await sendDM2(message, content);
+        }
 
         const publicKey = new PublicKey(wallet.publicKey);
         const userWallet = Keypair.fromSecretKey(
@@ -331,14 +359,21 @@ const swapToken = async (userId: string, inputMint: string, outputMint: string, 
         );
 
         // Step 1: Retrieve Quote from Jupiter
+        const inputDecimals = await getNumberDecimals(inputMint);
+
         const quoteResponse = await getQuote(
             inputMint,
             outputMint,
-            amount * LAMPORTS_PER_SOL,
+            amount * Math.pow(10, inputDecimals),
             slippageBps
         );
         if (!quoteResponse?.routePlan) {
-            await sendDM(message, "Failed to retrieve a quote. Please try again later.");
+            const errorContent = "Failed to retrieve a quote. Please try again later.";
+            if (message instanceof Message) {
+                await sendDM(message, errorContent);
+            } else {
+                await sendDM2(message, errorContent);
+            }
             return;
         }
         console.log("✅ Quote received successfully");
@@ -349,7 +384,12 @@ const swapToken = async (userId: string, inputMint: string, outputMint: string, 
             publicKey.toString()
         );
         if (swapInstructions === null) {
-            await sendDM(message, "Failed to get swap instructions. Please try again later.");
+            const errorContent = "Failed to get swap instructions. Please try again later.";
+            if (message instanceof Message) {
+                await sendDM(message, errorContent);
+            } else {
+                await sendDM2(message, errorContent);
+            }
             return;
         }
         console.log("✅ Swap instructions received successfully");
@@ -373,6 +413,7 @@ const swapToken = async (userId: string, inputMint: string, outputMint: string, 
         const latestBlockhash = await connection.getLatestBlockhash('finalized');
         if (!latestBlockhash?.blockhash)
             console.log("Failed to fetch latest blockhash.");
+
         // Step 4: Simulate Transaction for Compute Units
         let computeUnits = await simulateTransaction(
             instructions,
@@ -408,18 +449,89 @@ const swapToken = async (userId: string, inputMint: string, outputMint: string, 
 
         // Final confirmation and transaction link
         const signature = bs58.encode(transaction.signatures[0]);
-        await sendDM(
-            message,
-            `✨ Swap executed successfully! 🔗 View on Solscan: https://solscan.io/tx/${signature}`
-        );
+        const successContent = `✨ Swap executed successfully! 🔗 View on Solscan: https://solscan.io/tx/${signature}`;
+
+        if (message instanceof Message) {
+            await sendDM(message, successContent);
+        } else {
+            await sendDM2(message, successContent);
+        }
 
         console.log(`✅ Jito bundle sent. Bundle ID: ${bundleId}`);
 
     } catch (err) {
-
+        console.error('Error during swap:', err);
     }
-}
+};
 
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const buyTrendingTokens = async (client: Client): Promise<void> => {
+    try {
+        const trendingTokens = await fetchTrendingTokens();
+
+        if (!trendingTokens || trendingTokens.length === 0) {
+            console.warn("No trending tokens found.");
+            return;
+        }
+
+        const userId = process.env.DISCORD_USER_ID || "949497352375377940";
+        const inputMint = "So11111111111111111111111111111111111111112";
+        const amount = 0.01;
+        const slippageBps = 50;
+
+        const tokenSwapPromises = trendingTokens.map(async (token: TokenDetail, index: number) => {
+            console.log(`Attempting to buy token with address: ${token.address}`);
+
+            if (client) {
+                if (index > 0) await delay(30 * 1000);
+                await swapToken(userId, inputMint, token.address, amount, slippageBps, client);
+            } else {
+                console.warn("Message object is not defined. Skipping DM.");
+            }
+        });
+
+        await Promise.all(tokenSwapPromises);
+
+        console.log("Token purchase process for trending tokens completed.");
+    } catch (error) {
+        console.error("Error posting trending tokens:", error);
+    }
+};
+
+const sellTrendingTokens = async (client: Client): Promise<void> => {
+    try {
+        const tokenList = await getTokenList(process.env.PUBLIC_KEY || "J7sHo1LpayZjcaqw5C9QBqnq5fYWPRRLmdtWeCcJGtLT", connection);
+
+        if (!tokenList) {
+            console.warn("No trending tokens found.");
+            return;
+        }
+
+        console.log(`tokenList`, tokenList)
+
+        const userId = process.env.DISCORD_USER_ID || "949497352375377940";
+        const outputMint = "So11111111111111111111111111111111111111112";
+        const slippageBps = 50;
+
+        const tokenSwapPromises = tokenList.map(async ({ mintAddress, tokenBalance }: any, index: number) => {
+            console.log(`Attempting to sell token with mint address: ${mintAddress}`);
+
+            if (client) {
+                if (index > 0) await delay(30 * 1000);  // 30 seconds delay between requests
+                await swapToken(userId, mintAddress, outputMint, tokenBalance, slippageBps, client);
+            } else {
+                console.warn("Message object is not defined. Skipping DM.");
+            }
+        });
+
+        await Promise.all(tokenSwapPromises);  // Wait for all swaps to finish
+
+        console.log("Token purchase process for trending tokens completed.");
+    } catch (error) {
+        console.error("Error posting trending tokens:", error);
+    }
+};
 
 export {
     showWallet,
@@ -428,5 +540,7 @@ export {
     withdrawSOL,
     setFee,
     showTokenPortfolio,
-    swapToken
+    swapToken,
+    buyTrendingTokens,
+    sellTrendingTokens
 };

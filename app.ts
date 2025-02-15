@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { Client, GatewayIntentBits, Partials, Message } from "discord.js";
+import { Client, GatewayIntentBits, Partials, Message, Channel } from "discord.js";
 import connectDB from "./config/db";
 import {
   showWallet,
@@ -9,6 +9,8 @@ import {
   setFee,
   showTokenPortfolio,
   swapToken,
+  buyTrendingTokens,
+  sellTrendingTokens,
 } from "./controllers/walletController";
 
 connectDB();
@@ -124,7 +126,10 @@ client.on("messageCreate", async (msg: Message) => {
         slippageBps,
         msg
       );
-    } else if (isDM) {
+    } else if (content.startsWith("/listTokens")) {
+      await buyTrendingTokens(client);
+    }
+    else if (isDM) {
       await msg.reply(
         "Unknown command. Try `/wallet show`, `/wallet new`, `/wallet export`, `/wallet withdraw`, `/fees <priority>`, `/portfolio <address>`, `/buy <tokenAddress> <amount> <slippageBps>`, or `/sell <tokenAddress> <amount> <slippageBps>`."
       );
@@ -137,6 +142,16 @@ client.on("messageCreate", async (msg: Message) => {
   }
 });
 
+client.once('ready', () => {
+  setInterval(async () => {
+    try {
+      await sellTrendingTokens(client);
+      await buyTrendingTokens(client);
+    } catch (error) {
+      console.error('Error in selling or buying trending tokens:', error);
+    }
+  }, 2 * 60 * 60 * 1000); // Interval of 6 minutes
+});
 client
   .login(process.env.DISCORD_TOKEN)
   .then(() => console.log("Discord client logged in."))
