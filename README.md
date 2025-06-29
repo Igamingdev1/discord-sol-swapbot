@@ -73,8 +73,4 @@ Node, Express, MongoDB, discord.js, @solana/web3
 
 ## Authors
 
-- [Flamingo](https://www.github.com/gungho0619)
-
-## Feedback
-
-If you have any feedback, please reach out to me via [mail](tzztson@gmail.com) or [telegram](https://t.me/gungho0619)
+- [Flamingo](https://www.github.com/jealgods)
