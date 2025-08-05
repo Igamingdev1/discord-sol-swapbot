@@ -73,4 +73,4 @@ Node, Express, MongoDB, discord.js, @solana/web3
 
 ## Authors
 
-- [Flamingo](https://www.github.com/jealgods)
+- [Webet](https://www.github.com/Igamingdev1)
