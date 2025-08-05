@@ -24,7 +24,7 @@ Clone the project
 Go to the project directory
 
 ```bash
-  cd solanatradingbot
+  cd discord-sol-swapbot
 ```
 
 Install dependencies
