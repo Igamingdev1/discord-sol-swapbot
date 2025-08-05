@@ -18,7 +18,7 @@ QUIKNODE_RPC = "https://example.solana.quiknode.pro/000000/"
 Clone the project
 
 ```bash
-  git clone https://github.com/c1ted/solanatradingbot.git
+  git clone https://github.com/Igamingdev1/discord-sol-swapbot.git
 ```
 
 Go to the project directory
